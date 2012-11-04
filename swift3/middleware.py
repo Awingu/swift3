@@ -267,12 +267,23 @@ def canonical_string(req):
         buf += "%s:%s\n" % (k, amz_headers[k])
 
     path = req.path_qs
+    args = ''
     if '?' in path:
         path, args = path.split('?', 1)
-        for key in urlparse.parse_qs(args, keep_blank_values=True):
-            if key in ('acl', 'logging', 'torrent', 'location',
-                       'requestPayment', 'versioning', 'delete'):
-                return "%s%s?%s" % (buf, path, key)
+    segs = path.split('/')
+    if len(segs) > 2 and segs[2]:  # segs[2] is object name
+        # We doing this for replace '/' with %2F, because by default quote
+        # don't replace '/' with %2F
+        object_name = quote(unquote('/'.join(segs[2:])), safe='')
+        path = '/'.join(segs[:2] + [object_name])
+    params = []
+    for key, value in urlparse.parse_qsl(args, keep_blank_values=True):
+        # list of keys must be lexicographically sorted
+        if key in ('acl', 'location', 'logging', 'requestPayment',
+                   'torrent', 'versionId', 'versioning', 'versions'):
+            params.append('%s=%s' % (key, value) if value else key)
+    if params:
+        return "%s%s?%s" % (buf, path, '&'.join(params))
     return buf + path
 
 
@@ -556,7 +567,7 @@ class BucketController(WSGIContext):
                 return get_err_response('InvalidURI')
 
         resp = Response()
-        resp.headers.add('Location', self.container_name)
+        resp.headers['Location'] = self.container_name
         resp.status = HTTP_OK
         return resp
 
@@ -828,7 +839,7 @@ class Swift3Middleware(object):
             return get_err_response('InvalidArgument')(env, start_response)
 
         try:
-            controller, path_parts = self.get_controller(req.path)
+            controller, path_parts = self.get_controller(env['PATH_INFO'])
         except ValueError:
             return get_err_response('InvalidURI')(env, start_response)
 
