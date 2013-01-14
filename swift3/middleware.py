@@ -746,11 +746,12 @@ class ObjectController(WSGIContext):
                 return get_err_response('InvalidDigest')
             else:
                 return get_err_response('InvalidURI')
-
+        ti = datetime.datetime.utcnow().isoformat()
         if 'HTTP_X_COPY_FROM' in env:
             body = '<CopyObjectResult>' \
                    '<ETag>"%s"</ETag>' \
-                   '</CopyObjectResult>' % self._response_header_value('etag')
+                   '<LastModified>%s</LastModified>'\
+                   '</CopyObjectResult>' % (self._response_header_value('etag'), ti)
             return Response(status=HTTP_OK, body=body)
 
         return Response(status=200, etag=self._response_header_value('etag'))
