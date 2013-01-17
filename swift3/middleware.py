@@ -58,6 +58,7 @@ from xml.sax.saxutils import escape as xml_escape
 import urlparse
 from xml.dom.minidom import parseString
 
+from webob import Request, Response
 from simplejson import loads
 import email.utils
 import datetime
@@ -66,7 +67,6 @@ import re
 from swift.common.utils import split_path
 from swift.common.utils import get_logger
 from swift.common.wsgi import WSGIContext
-from swift.common.swob import Request, Response
 from swift.common.http import HTTP_OK, HTTP_CREATED, HTTP_ACCEPTED, \
     HTTP_NO_CONTENT, HTTP_BAD_REQUEST, HTTP_UNAUTHORIZED, HTTP_FORBIDDEN, \
     HTTP_NOT_FOUND, HTTP_CONFLICT, HTTP_UNPROCESSABLE_ENTITY, is_success, \
@@ -266,9 +266,7 @@ def canonical_string(req):
     for k in sorted(key.lower() for key in amz_headers):
         buf += "%s:%s\n" % (k, amz_headers[k])
 
-    path = req.path
-    if req.query_string:
-        path += '?' + req.query_string
+    path = req.path_qs
     if '?' in path:
         path, args = path.split('?', 1)
         for key in urlparse.parse_qs(args, keep_blank_values=True):
@@ -558,7 +556,7 @@ class BucketController(WSGIContext):
                 return get_err_response('InvalidURI')
 
         resp = Response()
-        resp.headers['Location'] = self.container_name
+        resp.headers.add('Location', self.container_name)
         resp.status = HTTP_OK
         return resp
 
@@ -805,15 +803,15 @@ class Swift3Middleware(object):
         self.logger.debug('Calling Swift3 Middleware')
         self.logger.debug(req.__dict__)
 
-        if 'AWSAccessKeyId' in req.params:
+        if 'AWSAccessKeyId' in req.GET:
             try:
-                req.headers['Date'] = req.params['Expires']
+                req.headers['Date'] = req.GET['Expires']
                 req.headers['Authorization'] = \
-                    'AWS %(AWSAccessKeyId)s:%(Signature)s' % req.params
+                    'AWS %(AWSAccessKeyId)s:%(Signature)s' % req.GET
             except KeyError:
                 return get_err_response('InvalidArgument')(env, start_response)
 
-        if 'Authorization' not in req.headers:
+        if not 'Authorization' in req.headers:
             return self.app(env, start_response)
 
         try:
